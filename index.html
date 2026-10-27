@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>pinch — sculpt live video with your hands, face and body</title>
 <meta name="description" content="Pinch, pull and morph live video in real time with hand, face and body tracking. Runs in your browser; the camera feed never leaves your machine." />
-<meta name="theme-color" content="#0f0f13" />
+<meta name="theme-color" content="#121314" />
 <link rel="icon" href="favicon.svg" type="image/svg+xml" />
 <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32" />
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
@@ -19,61 +19,162 @@
 <meta property="og:image:height" content="630" />
 <meta property="og:image:alt" content="pinch: a mint grid pinched toward a single point on a dark background" />
 <meta name="twitter:card" content="summary_large_image" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
-  #stage { position: fixed; inset: 0; }
-  #ui {
-    position: fixed; top: 12px; left: 12px; z-index: 10;
-    font: 13px/1.5 system-ui, sans-serif; color: #eee;
-    background: rgba(10,10,14,.78); backdrop-filter: blur(8px);
-    border: 1px solid rgba(255,255,255,.12); border-radius: 10px;
-    padding: 12px 14px; width: 250px; user-select: none;
-    max-height: calc(100vh - 48px); overflow-y: auto;
+  /* the jas.black console: Code Painter's flat keys + leds, SnipSnap's status lights */
+  :root{
+    --case:#121314; --panel:#18191b; --line:#26272a;
+    --key:#222326; --keyon:#1b1c1e; --keyline:#303135; --keyshadow:#070708; --press:rgba(0,0,0,.5);
+    --text:#e4e4e1; --muted:#6f7074; --ledoff:#34353a; --knobtop:#2c2d31; --track:#2e2f33; --well:#141517;
+    --accent:#39ff88; --accent2:#b36bff;
+    --glow:0 0 4px color-mix(in srgb, var(--accent) 90%, transparent);
+    --glow2:0 0 4px color-mix(in srgb, var(--accent2) 90%, transparent);
   }
-  #ui h1 { font-size: 13px; margin: 0 0 6px; letter-spacing: .06em; text-transform: uppercase; color: #9fe6c8; }
-  #ui h1 .ver { color: #567; font-size: 10px; text-transform: none; letter-spacing: 0; float: right; }
-  #ui h2 { font-size: 11px; margin: 10px 0 4px; letter-spacing: .08em; text-transform: uppercase; color: #789;
-    border-top: 1px solid rgba(255,255,255,.08); padding-top: 8px; }
-  #ui .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 5px 0; }
-  #ui label { color: #bbb; }
-  #ui select, #ui button {
-    background: #1c1c24; color: #eee; border: 1px solid #333; border-radius: 6px;
-    padding: 3px 8px; font: inherit; cursor: pointer;
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--case)}
+  body{color:var(--text);font:11px/1.4 'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace}
+  #stage{position:fixed;inset:0}
+  button{font:inherit;color:inherit;cursor:pointer}
+
+  /* ---------- control panel ---------- */
+  #ui{
+    position:fixed;top:14px;left:14px;z-index:10;width:292px;
+    max-height:calc(100vh - 28px);overflow-y:auto;overscroll-behavior:contain;
+    display:flex;flex-direction:column;gap:6px;user-select:none;
+    scrollbar-width:thin;scrollbar-color:var(--keyline) transparent;
   }
-  #ui button:hover { border-color: #9fe6c8; }
-  #ui button.wide { flex: 1; }
-  #ui input[type=range] { width: 104px; accent-color: #9fe6c8; }
-  #ui input[type=checkbox] { accent-color: #9fe6c8; }
-  #ui .val { color: #789; min-width: 30px; text-align: right; }
-  #playlist { margin-top: 4px; max-height: 130px; overflow-y: auto; }
-  #playlist .item {
-    display: flex; align-items: center; gap: 6px;
-    padding: 3px 4px 3px 8px; border-radius: 5px; cursor: pointer; color: #bbb;
+  #ui::-webkit-scrollbar{width:4px} #ui::-webkit-scrollbar-thumb{background:var(--keyline);border-radius:2px}
+  .panel{border-radius:12px;background:var(--panel);border:1px solid var(--line);padding:12px 14px;flex:none}
+
+  header.panel{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px}
+  .brand{font-family:'Archivo',sans-serif;font-weight:800;font-size:13px;letter-spacing:.32em;white-space:nowrap}
+  .status{display:flex;gap:10px}
+  .status span{display:flex;align-items:center;gap:5px}
+  .led{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--ledoff);flex:none;transition:background .2s,box-shadow .2s}
+  .led.on{background:var(--accent);box-shadow:var(--glow)}
+  .led.p.on{background:var(--accent2);box-shadow:var(--glow2)}
+  .led.r.on{background:#ff3b30;box-shadow:0 0 5px rgba(255,59,48,.8);animation:recpulse 1.2s ease-in-out infinite}
+  @keyframes recpulse{50%{opacity:.45}}
+  .lbl{font-size:9px;letter-spacing:.08em;color:var(--muted);white-space:nowrap}
+
+  /* collapsible sections, titled like Code Painter's panels */
+  details.panel{padding:0}
+  summary{
+    list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:11px 14px;font-size:9px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);
   }
-  #playlist .item .name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #playlist .item .rm {
-    flex: none; background: none; border: none; color: #667; cursor: pointer;
-    font: 15px/1 system-ui; padding: 1px 5px; border-radius: 4px;
+  summary::-webkit-details-marker{display:none}
+  summary b{font-weight:600;color:var(--text)}
+  summary::after{content:'';width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid var(--muted);transform:rotate(-90deg);transition:transform .15s}
+  details[open] summary::after{transform:none}
+  summary:hover b{color:#fff}
+  .body{padding:0 14px 12px;display:flex;flex-direction:column;gap:9px}
+
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:22px}
+  .row > .lbl{flex:none}
+  .ctl{display:flex;align-items:center;gap:8px;flex:1;justify-content:flex-end}
+  .val{font-size:9px;font-weight:600;color:var(--text);min-width:34px;text-align:right}
+  .pair{display:flex;gap:6px;flex-wrap:wrap}
+
+  /* dropdowns: a dark well with a small caret */
+  select{
+    appearance:none;-webkit-appearance:none;height:28px;min-width:0;max-width:170px;border-radius:8px;border:1px solid var(--keyline);
+    background:var(--well) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%236f7074'/%3E%3C/svg%3E") no-repeat right 10px center;
+    padding:0 26px 0 10px;font:500 9.5px 'IBM Plex Mono',monospace;color:var(--text);cursor:pointer;text-transform:lowercase;
   }
-  #playlist .item .rm:hover { color: #f66; background: rgba(255,80,80,.12); }
-  #playlist .item:hover { background: rgba(255,255,255,.07); }
-  #playlist .item.current { color: #9fe6c8; background: rgba(159,230,200,.12); }
-  #playlist .item { cursor: grab; }
-  #playlist .item.dragover { outline: 1px dashed #9fe6c8; }
-  #ui select { max-width: 140px; }
-  #presetRow { gap: 4px; }
-  #presetRow button.preset { flex: 1; padding: 3px 0; color: #667; }
-  #presetRow button.preset.saved { color: #9fe6c8; border-color: #3a5a4c; }
-  #status { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.1); color: #8fa; min-height: 34px; white-space: pre-line; }
-  #hint { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 10;
-    color: rgba(255,255,255,.5); font: 12px system-ui, sans-serif; text-align: center; pointer-events: none; }
-  #camPreview {
-    position: fixed; right: 12px; bottom: 12px; z-index: 9; width: 240px;
-    border: 1px solid rgba(255,255,255,.25); border-radius: 8px;
-    background: #111;
+  select:hover{border-color:var(--muted)}
+  select:focus-visible{outline:1px solid var(--accent);outline-offset:1px}
+  select option, select optgroup{background:var(--panel);color:var(--text);text-transform:none}
+
+  /* faders: 2px line filled in green up to the knob (--pct is kept in sync by the script below) */
+  input[type=range]{-webkit-appearance:none;appearance:none;flex:1;min-width:0;max-width:150px;height:18px;background:transparent;margin:0;cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{height:2px;border-radius:1px;background:linear-gradient(90deg,var(--accent) var(--pct,50%),var(--track) var(--pct,50%))}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-6px;border-radius:50%;background:var(--knobtop);box-shadow:0 1px 3px rgba(0,0,0,.35),inset 0 0 0 1px var(--keyline)}
+  input[type=range]::-moz-range-track{height:2px;background:var(--track)}
+  input[type=range]::-moz-range-progress{height:2px;background:var(--accent)}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:50%;background:var(--knobtop);box-shadow:0 1px 3px rgba(0,0,0,.35),inset 0 0 0 1px var(--keyline)}
+  input[type=range]:hover::-webkit-slider-thumb{box-shadow:0 1px 3px rgba(0,0,0,.35),inset 0 0 0 1px var(--muted)}
+  input[type=range]:focus-visible{outline:1px solid var(--accent);outline-offset:2px;border-radius:4px}
+
+  /* keys: flat, pressable */
+  .key{
+    flex:1;height:32px;padding:0 10px;border-radius:9px;border:1px solid var(--keyline);background:var(--key);
+    box-shadow:0 2px 0 var(--keyshadow);font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.03em;color:var(--text);
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;
   }
-  #fileInput, #driveInput { display: none; }
-  .hidden { display: none !important; }
+  .key:hover{border-color:var(--muted)}
+  .key:active{transform:translateY(1px);box-shadow:0 1px 0 var(--keyshadow),inset 0 1px 3px var(--press)}
+  .key:focus-visible{outline:1px solid var(--accent);outline-offset:1px}
+  .key.go{background:var(--accent);color:#0b0b0c;border-color:color-mix(in srgb,var(--accent) 80%,#000);box-shadow:0 2px 0 color-mix(in srgb,var(--accent) 55%,#000);font-weight:600}
+  .key.go:hover{border-color:color-mix(in srgb,var(--accent) 55%,#000)}
+  .key.ink{background:var(--text);color:var(--case);border-color:var(--text)}
+  .key.ink .dot{width:8px;height:8px;border-radius:50%;background:currentColor;opacity:.55;flex:none}
+  .key.ink.on .dot{background:#ff3b30;opacity:1;box-shadow:0 0 5px rgba(255,59,48,.8);animation:recpulse 1.2s ease-in-out infinite}
+  .bigrow{display:flex;gap:6px}
+  .bigrow .key{height:40px;font-size:10.5px}
+
+  /* toggles: small keys with an led instead of a checkbox */
+  .tog{
+    position:relative;flex:1;height:28px;padding:0 9px;border-radius:7px;border:1px solid var(--keyline);background:var(--key);
+    box-shadow:0 1px 0 var(--keyshadow);display:inline-flex;align-items:center;gap:7px;cursor:pointer;
+    font:500 9.5px 'IBM Plex Mono',monospace;color:var(--muted);white-space:nowrap;
+  }
+  .tog::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--ledoff);flex:none}
+  .tog:hover{border-color:var(--muted)}
+  .tog input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
+  .tog:has(input:checked){color:var(--text);background:var(--keyon);box-shadow:inset 0 1px 2px var(--press)}
+  .tog:has(input:checked)::before{background:var(--accent);box-shadow:var(--glow)}
+  .tog:has(input:focus-visible){outline:1px solid var(--accent);outline-offset:1px}
+  .tog.slim{flex:none}
+
+  /* presets: a row of small keys, the saved ones get a purple led */
+  #presetRow{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px}
+  #presetRow button.preset{
+    position:relative;height:30px;border-radius:8px;border:1px solid var(--keyline);background:var(--key);box-shadow:0 2px 0 var(--keyshadow);
+    font:500 9.5px 'IBM Plex Mono',monospace;color:var(--muted);padding:9px 0 0;
+  }
+  #presetRow button.preset::before{content:'';position:absolute;left:50%;top:5px;margin-left:-2.5px;width:5px;height:5px;border-radius:50%;background:var(--ledoff)}
+  #presetRow button.preset.saved{color:var(--text)}
+  #presetRow button.preset.saved::before{background:var(--accent2);box-shadow:var(--glow2)}
+  #presetRow button.preset:hover{border-color:var(--muted)}
+  #presetRow button.preset:active{transform:translateY(1px);box-shadow:0 1px 0 var(--keyshadow)}
+
+  #playlist{max-height:150px;overflow-y:auto;border-radius:8px;border:1px solid var(--keyline);background:var(--well);padding:3px;scrollbar-width:thin;scrollbar-color:var(--keyline) transparent}
+  #playlist:empty{display:none}
+  #playlist .item{display:flex;align-items:center;gap:6px;padding:3px 3px 3px 9px;border-radius:6px;cursor:grab;color:var(--muted);font-size:9.5px;border:1px solid transparent}
+  #playlist .item .name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #playlist .item .rm{flex:none;background:none;border:0;color:var(--muted);font:15px/1 system-ui;padding:2px 6px;border-radius:5px}
+  #playlist .item .rm:hover{color:#fff;background:#d83a3a}
+  #playlist .item:hover{color:var(--text)}
+  #playlist .item.current{color:var(--text);border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+  #playlist .item.dragover{border-style:dashed;border-color:var(--accent2)}
+
+  /* status: the green-on-black screen */
+  #status{
+    border-radius:8px;background:#0b0b0c;border:1px solid var(--line);color:var(--accent);
+    font-size:9.5px;line-height:1.6;padding:7px 10px;min-height:34px;white-space:pre-line;
+  }
+  /* record + status stay pinned to the bottom of the panel column while it scrolls */
+  .dock{position:sticky;bottom:0;display:flex;flex-direction:column;gap:9px;box-shadow:0 -10px 16px -6px var(--case)}
+  .note{font-size:8.5px;color:var(--muted);letter-spacing:.04em}
+
+  /* ---------- camera preview + hint ---------- */
+  #camPreview{position:fixed;right:14px;bottom:14px;z-index:9;width:240px;border-radius:12px;border:1px solid var(--line);background:var(--panel)}
+  #hint{
+    position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:10;pointer-events:none;
+    border-radius:8px;background:#0b0b0cdd;border:1px solid var(--line);padding:6px 12px;
+    font-size:9px;color:var(--muted);white-space:nowrap;
+  }
+  #hint b{color:var(--text);font-weight:600}
+  #fileInput,#driveInput{display:none}
+  .hidden{display:none !important}
+
+  @media (max-width:1100px){ #hint{display:none} }
+  @media (max-width:700px){
+    #ui{top:8px;left:8px;right:8px;width:auto;max-height:55vh}
+    #camPreview{width:150px;right:8px;bottom:8px}
+  }
 </style>
 </head>
 <body>
@@ -81,110 +182,166 @@
 <canvas id="camPreview"></canvas>
 
 <div id="ui">
-  <h1>track-morph <span class="ver">build 11</span></h1>
+  <header class="panel">
+    <span class="brand" title="build 12">PINCH</span>
+    <div class="status" aria-label="Status">
+      <span><i class="led" id="ledCam"></i><span class="lbl">cam</span></span>
+      <span><i class="led p" id="ledTrack"></i><span class="lbl">track</span></span>
+      <span><i class="led r" id="ledRec"></i><span class="lbl">rec</span></span>
+    </div>
+  </header>
 
-  <h2>Tracking</h2>
-  <div class="row"><label>Mode</label>
-    <select id="modeSel">
-      <option value="hands" selected>Hands (pinch)</option>
-      <option value="face">Face</option>
-      <option value="both">Hands + face</option>
-      <option value="body">Body</option>
-      <option value="all">Everything</option>
-    </select>
-  </div>
-  <div class="row"><label>Input</label>
-    <select id="trackInput">
-      <option value="webcam" selected>Webcam</option>
-      <option value="drive">Driving video</option>
-    </select>
-  </div>
-  <div class="row"><button id="loadDriveBtn" class="wide">Load driving video…</button></div>
-  <div class="row"><label>Brush size</label><input id="brushSize" type="range" min="0.06" max="0.35" step="0.01" value="0.16"></div>
-  <div class="row"><label>Pinch</label>
-    <span><input id="pinchDist" type="range" min="0.5" max="1.8" step="0.05" value="1"><span class="val" id="pinchDistVal">×1.00</span></span>
-  </div>
-  <div class="row"><label>Face gain</label><input id="faceAmp" type="range" min="0.5" max="8" step="0.1" value="3"></div>
-  <div class="row"><label>Face warp</label>
-    <select id="faceEffectSel">
-      <option value="pull">Pull</option>
-      <option value="inflate" selected>Inflate</option>
-      <option value="twist">Twist</option>
-      <option value="ripple">Ripple</option>
-    </select>
-  </div>
+  <details class="panel" open>
+    <summary><b>tracking</b></summary>
+    <div class="body">
+      <div class="row"><span class="lbl">mode</span>
+        <select id="modeSel">
+          <option value="hands" selected>Hands (pinch)</option>
+          <option value="face">Face</option>
+          <option value="both">Hands + face</option>
+          <option value="body">Body</option>
+          <option value="all">Everything</option>
+        </select>
+      </div>
+      <div class="row"><span class="lbl">input</span>
+        <span class="ctl">
+          <select id="trackInput">
+            <option value="webcam" selected>Webcam</option>
+            <option value="drive">Driving video</option>
+          </select>
+          <button id="loadDriveBtn" class="key" style="flex:none;height:28px" title="Load a video for the trackers to watch">load…</button>
+        </span>
+      </div>
+      <div class="row"><span class="lbl">brush</span><input id="brushSize" type="range" min="0.06" max="0.35" step="0.01" value="0.16"></div>
+      <div class="row"><span class="lbl">pinch</span>
+        <span class="ctl"><input id="pinchDist" type="range" min="0.5" max="1.8" step="0.05" value="1"><output class="val" id="pinchDistVal">×1.00</output></span>
+      </div>
+      <div class="row"><span class="lbl">face gain</span><input id="faceAmp" type="range" min="0.5" max="8" step="0.1" value="3"></div>
+      <div class="row"><span class="lbl">face warp</span>
+        <select id="faceEffectSel">
+          <option value="pull">Pull</option>
+          <option value="inflate" selected>Inflate</option>
+          <option value="twist">Twist</option>
+          <option value="ripple">Ripple</option>
+        </select>
+      </div>
+    </div>
+  </details>
 
-  <h2>Effect</h2>
-  <div class="row"><label>Warp type</label>
-    <select id="effectSel">
-      <option value="pull" selected>Pull</option>
-      <option value="inflate">Inflate</option>
-      <option value="twist">Twist</option>
-      <option value="ripple">Ripple</option>
-    </select>
-  </div>
-  <div class="row"><label>Material</label>
-    <select id="materialSel">
-      <option value="clay" selected>Clay (holds)</option>
-      <option value="jelly">Jelly (bounces)</option>
-      <option value="liquid">Liquid (ripples)</option>
-    </select>
-  </div>
-  <div class="row"><label>Smoothing</label><input id="smoothing" type="range" min="0" max="1" step="0.01" value="0.35"></div>
-  <div class="row"><label>Shader</label>
-    <select id="shaderSel"></select>
-  </div>
-  <div class="row"><label>Amount</label><input id="amtSlider" type="range" min="0" max="1" step="0.01" value="0.5"></div>
+  <details class="panel" open>
+    <summary><b>effect</b></summary>
+    <div class="body">
+      <div class="row"><span class="lbl">warp</span>
+        <select id="effectSel">
+          <option value="pull" selected>Pull</option>
+          <option value="inflate">Inflate</option>
+          <option value="twist">Twist</option>
+          <option value="ripple">Ripple</option>
+        </select>
+      </div>
+      <div class="row"><span class="lbl">material</span>
+        <select id="materialSel">
+          <option value="clay" selected>Clay (holds)</option>
+          <option value="jelly">Jelly (bounces)</option>
+          <option value="liquid">Liquid (ripples)</option>
+        </select>
+      </div>
+      <div class="row"><span class="lbl">smoothing</span><input id="smoothing" type="range" min="0" max="1" step="0.01" value="0.35"></div>
+      <div class="row"><span class="lbl">shader</span><select id="shaderSel"></select></div>
+      <div class="row"><span class="lbl">amount</span><input id="amtSlider" type="range" min="0" max="1" step="0.01" value="0.5"></div>
+    </div>
+  </details>
 
-  <h2>Reset</h2>
-  <div class="row"><label><input id="autoReset" type="checkbox"> Auto reset</label>
-    <span><input id="resetDelay" type="range" min="1" max="120" step="1" value="10"><span class="val" id="resetDelayVal">10s</span></span>
+  <details class="panel" open>
+    <summary><b>media</b><span class="note">drop files anywhere</span></summary>
+    <div class="body">
+      <div class="pair">
+        <button id="webcamBtn" class="key">webcam</button>
+        <button id="loadVideoBtn" class="key">open files…</button>
+      </div>
+      <div class="row"><span class="lbl">playlist</span>
+        <span class="ctl">
+          <select id="playlistMode">
+            <option value="single">Play single</option>
+            <option value="all" selected>Play all</option>
+            <option value="pingpong">Ping-pong</option>
+            <option value="random">Random</option>
+          </select>
+          <label class="tog slim"><input id="plLoop" type="checkbox" checked>loop</label>
+        </span>
+      </div>
+      <div id="playlist"></div>
+    </div>
+  </details>
+
+  <details class="panel">
+    <summary><b>reset</b></summary>
+    <div class="body">
+      <div class="row"><label class="tog slim"><input id="autoReset" type="checkbox">auto</label>
+        <span class="ctl"><input id="resetDelay" type="range" min="1" max="120" step="1" value="10"><output class="val" id="resetDelayVal">10s</output></span>
+      </div>
+      <div class="pair"><button id="resetBtn" class="key">reset warp now <span class="note">R</span></button></div>
+    </div>
+  </details>
+
+  <details class="panel">
+    <summary><b>view</b></summary>
+    <div class="body">
+      <div class="pair">
+        <label class="tog"><input id="showPreview" type="checkbox" checked>camera</label>
+        <label class="tog"><input id="showCursors" type="checkbox" checked>points</label>
+      </div>
+      <div class="row"><span class="lbl">render scale</span><input id="renderScale" type="range" min="0.5" max="1" step="0.05" value="1"></div>
+      <div class="pair"><button id="projectorBtn" class="key">projector window</button></div>
+    </div>
+  </details>
+
+  <details class="panel">
+    <summary><b>extras</b></summary>
+    <div class="body">
+      <div class="pair">
+        <label class="tog"><input id="mouthBlow" type="checkbox" checked>mouth blow</label>
+        <label class="tog"><input id="palmHeal" type="checkbox">palm heal</label>
+      </div>
+      <div class="pair">
+        <label class="tog"><input id="soundOut" type="checkbox">canvas sound</label>
+        <label class="tog"><input id="attract" type="checkbox">attract</label>
+      </div>
+      <div class="row"><label class="tog slim"><input id="micReact" type="checkbox">mic</label>
+        <input id="micGain" type="range" min="0" max="1" step="0.01" value="0.5" aria-label="Mic gain">
+      </div>
+    </div>
+  </details>
+
+  <details class="panel">
+    <summary><b>presets</b><span class="note">shift+click saves</span></summary>
+    <div class="body">
+      <div id="presetRow"></div>
+      <div class="row"><label class="tog slim"><input id="presetCycle" type="checkbox">auto-cycle</label><span class="note">keys 1–6</span></div>
+    </div>
+  </details>
+
+  <div class="panel dock">
+    <div class="bigrow"><button id="recordBtn" class="key ink" title="Record 10 s of the artwork (S)"><i class="dot"></i>record 10s</button></div>
+    <div id="status">starting…</div>
   </div>
-  <div class="row"><button id="resetBtn" class="wide">Reset warp now</button></div>
-
-  <h2>View</h2>
-  <div class="row"><label><input id="showPreview" type="checkbox" checked> Camera preview</label>
-    <label><input id="showCursors" type="checkbox" checked> Points</label></div>
-  <div class="row"><label>Render scale</label><input id="renderScale" type="range" min="0.5" max="1" step="0.05" value="1"></div>
-  <div class="row"><button id="projectorBtn" class="wide">Open projector window</button></div>
-
-  <h2>Extras</h2>
-  <div class="row"><label><input id="mouthBlow" type="checkbox" checked> Mouth blow</label>
-    <label><input id="palmHeal" type="checkbox"> Palm heal</label></div>
-  <div class="row"><label><input id="micReact" type="checkbox"> Mic reactive</label>
-    <input id="micGain" type="range" min="0" max="1" step="0.01" value="0.5"></div>
-  <div class="row"><label><input id="soundOut" type="checkbox"> Canvas sound</label>
-    <label><input id="attract" type="checkbox"> Attract mode</label></div>
-  <div class="row"><button id="recordBtn" class="wide">Record 10s clip (S)</button></div>
-
-  <h2>Presets</h2>
-  <div class="row" id="presetRow"></div>
-  <div class="row"><label><input id="presetCycle" type="checkbox"> Auto-cycle</label>
-    <span class="val" style="min-width:0">shift+click saves</span></div>
-
-  <h2>Media</h2>
-  <div class="row">
-    <button id="webcamBtn" class="wide">Webcam</button>
-    <button id="loadVideoBtn" class="wide">Load files…</button>
-  </div>
-  <div class="row"><label>Playlist</label>
-    <select id="playlistMode">
-      <option value="single">Play single</option>
-      <option value="all" selected>Play all</option>
-      <option value="pingpong">Ping-pong</option>
-      <option value="random">Random</option>
-    </select>
-  </div>
-  <div class="row"><label><input id="plLoop" type="checkbox" checked> Loop</label>
-    <span class="val" style="min-width:0">drag items to reorder</span></div>
-  <div id="playlist"></div>
-
-  <div id="status">starting…</div>
 </div>
-<div id="hint">pinch (thumb + index) to grab &amp; drag — or click-drag with the mouse · face points morph like pinches · R reset · H hide UI · F fullscreen · drop videos/images anywhere</div>
+
+<div id="hint"><b>pinch</b> to grab &amp; drag · or click-drag · <b>R</b> reset · <b>H</b> hide ui · <b>F</b> full screen · <b>S</b> record · drop videos anywhere</div>
 <input id="fileInput" type="file" accept="video/*,image/*,.mov,.mp4,.m4v,.webm,.mkv,.avi" multiple>
 <input id="driveInput" type="file" accept="video/*,.mov,.mp4,.m4v,.webm,.mkv,.avi">
 
+<script>
+  // keep each fader's green fill in step with its knob, including when presets set values from code
+  (() => {
+    const ranges = [...document.querySelectorAll('input[type=range]')];
+    const sync = () => ranges.forEach(r => {
+      const pct = (r.value - r.min) / (r.max - r.min) * 100 + '%';
+      if (r.style.getPropertyValue('--pct') !== pct) r.style.setProperty('--pct', pct);
+    });
+    addEventListener('input', sync); sync(); setInterval(sync, 250);
+  })();
+</script>
 <script type="importmap">
 {
   "imports": {
@@ -193,6 +350,6 @@
   }
 }
 </script>
-<script type="module" src="main.js?v=11"></script>
+<script type="module" src="main.js?v=12"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { FilesetResolver, HandLandmarker, FaceLandmarker, PoseLandmarker } from '@mediapipe/tasks-vision';
-import { EFFECTS, VERTEX, buildFragment } from './shaders.js?v=11';
+import { EFFECTS, VERTEX, buildFragment } from './shaders.js?v=12';
 
 // ---------- state ----------
 const state = {
@@ -248,17 +248,23 @@ function useFallbackPattern() {
 function drawFallback(t) {
   const c = fallbackCtx, W = 1280, H = 720;
   const g = c.createLinearGradient(0, 0, W, H);
-  g.addColorStop(0, `hsl(${(t * 0.02) % 360} 70% 45%)`);
-  g.addColorStop(1, `hsl(${(t * 0.02 + 120) % 360} 70% 35%)`);
+  g.addColorStop(0, '#222326');
+  g.addColorStop(1, '#121314');
   c.fillStyle = g; c.fillRect(0, 0, W, H);
-  c.strokeStyle = 'rgba(255,255,255,.55)'; c.lineWidth = 2;
+  const lg = c.createLinearGradient(0, H, W, 0); // violet → green, like the icon
+  lg.addColorStop(0, '#b36bff'); lg.addColorStop(1, '#39ff88');
+  c.strokeStyle = lg; c.globalAlpha = 0.6 + 0.15 * Math.sin(t * 0.002); c.lineWidth = 2;
   for (let x = 0; x <= W; x += 80) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, H); c.stroke(); }
   for (let y = 0; y <= H; y += 80) { c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke(); }
-  c.fillStyle = 'rgba(255,255,255,.9)';
+  c.globalAlpha = 1;
+  c.fillStyle = 'rgba(228,228,225,.85)';
   for (let x = 80; x < W; x += 160)
     for (let y = 80; y < H; y += 160) { c.beginPath(); c.arc(x, y, 14, 0, 7); c.fill(); }
-  c.font = 'bold 44px system-ui'; c.textAlign = 'center';
-  c.fillText('no camera — test pattern (drag with mouse)', W / 2, H / 2);
+  c.font = '500 28px "IBM Plex Mono", ui-monospace, monospace'; c.textAlign = 'center';
+  c.letterSpacing = '2px';
+  c.fillStyle = '#e4e4e1';
+  c.fillText('no camera · drag with the mouse', W / 2, H / 2 + 10);
+  c.letterSpacing = '0px';
   if (activeTexture) activeTexture.needsUpdate = true;
 }
 
@@ -813,7 +819,7 @@ function updatePointer(id, x, y, pinched, now) {
   const c = getCursor(id);
   c.visible = state.showCursors;
   c.position.set(x, y, 1);
-  c.material.color.set(pinched ? 0x53e0a2 : 0xffffff);
+  c.material.color.set(pinched ? 0x39ff88 : 0xe4e4e1);
   c.scale.setScalar(pinched ? 1.4 : 1);
 
   if (pt.pinched) {
@@ -1007,7 +1013,7 @@ function drawPreview() {
         c.beginPath(); c.arc(px(p.x) * w, p.y * h, 1.5, 0, 7); c.fill();
       }
       const t = lm[4], ix = lm[8];
-      c.strokeStyle = c.fillStyle = pinched ? '#53e0a2' : '#ffd35a';
+      c.strokeStyle = c.fillStyle = pinched ? '#39ff88' : '#b36bff';
       c.lineWidth = 2;
       c.beginPath();
       c.moveTo(px(t.x) * w, t.y * h);
@@ -1018,7 +1024,7 @@ function drawPreview() {
   }
   if (wantFace && lastFace?.faceLandmarks?.[0]) {
     const lms = lastFace.faceLandmarks[0];
-    c.fillStyle = '#6ad4ff';
+    c.fillStyle = '#e4e4e1';
     for (const idx of FACE_POINTS) {
       const p = lms[idx];
       c.beginPath(); c.arc(px(p.x) * w, p.y * h, 3, 0, 7); c.fill();
@@ -1026,7 +1032,7 @@ function drawPreview() {
   }
   if (wantPoseFor(state.mode) && lastPose?.landmarks?.[0]) {
     const lms = lastPose.landmarks[0];
-    c.fillStyle = '#ff7ad9';
+    c.fillStyle = '#39ff88';
     for (const idx of POSE_POINTS) {
       const p = lms[idx];
       c.beginPath(); c.arc(px(p.x) * w, p.y * h, 3, 0, 7); c.fill();
@@ -1052,7 +1058,7 @@ function openProjector() {
   doc.body.appendChild(v);
   const hint = doc.createElement('div');
   hint.textContent = 'drag this window to the projector display, then double-click for fullscreen';
-  hint.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);color:#888;font:13px system-ui;transition:opacity 1s;';
+  hint.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);color:#6f7074;font:10px ui-monospace,Menlo,Consolas,monospace;letter-spacing:.04em;transition:opacity 1s;';
   doc.body.appendChild(hint);
   setTimeout(() => { hint.style.opacity = '0'; }, 6000);
   v.addEventListener('dblclick', () => doc.documentElement.requestFullscreen());
@@ -1076,16 +1082,18 @@ let recording = false;
 function recordClip(seconds = 10) {
   if (recording) return;
   recording = true;
+  $('recordBtn').classList.add('on'); $('ledRec').classList.add('on');
   const stream = renderer.domElement.captureStream(30);
   const rec = new MediaRecorder(stream, { mimeType: 'video/webm' });
   const chunks = [];
   rec.ondataavailable = e => chunks.push(e.data);
   rec.onstop = () => {
     recording = false;
+    $('recordBtn').classList.remove('on'); $('ledRec').classList.remove('on');
     const url = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' }));
     const a = document.createElement('a');
     a.href = url;
-    a.download = `trackmorph-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
+    a.download = `pinch-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
     setStatus('clip saved to downloads');
@@ -1171,15 +1179,18 @@ function maybeCyclePresets(now) {
 
 // ---------- UI ----------
 const statusEl = document.getElementById('status');
+const ledCam = document.getElementById('ledCam'), ledTrack = document.getElementById('ledTrack');
 function setStatus(extra) {
   const lines = [];
-  lines.push(`camera: ${state.camReady ? 'live' : 'off'}   hands: ${state.handsReady ? 'on' : '—'}   face: ${state.faceReady ? 'on' : '—'}   body: ${state.poseReady ? 'on' : '—'}`);
+  lines.push(`cam ${state.camReady ? 'live' : 'off'} · hands ${state.handsReady ? 'on' : '—'} · face ${state.faceReady ? 'on' : '—'} · body ${state.poseReady ? 'on' : '—'}`);
   if (attractActive) lines.push('attract mode active — ghost performers');
   if (state.trackingSource === 'drive' && state.driveReady) lines.push('tracking: driving video');
   if (playlistActive && playlist.length)
     lines.push(`playing ${plIndex + 1}/${playlist.length}: ${playlist[plIndex].name}`);
   if (extra) lines.push(extra);
   statusEl.textContent = lines.join('\n');
+  ledCam.classList.toggle('on', state.camReady || (state.trackingSource === 'drive' && state.driveReady));
+  ledTrack.classList.toggle('on', state.handsReady || state.faceReady || state.poseReady);
 }
 
 const $ = id => document.getElementById(id);
@@ -1334,7 +1345,7 @@ function runAttract(now) {
     if (state.showCursors) {
       const c = getCursor('ghost' + g);
       c.visible = true; c.position.set(px, py, 1);
-      c.material.color.set(0x8877ff);
+      c.material.color.set(0xb36bff);
     }
   }
 }
