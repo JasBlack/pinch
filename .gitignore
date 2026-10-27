@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+._*
+__MACOSX/
+
+# editors
+.vscode/
+.idea/
+*.swp
+
+# local recordings / test media
+*.webm
+*.mp4
+*.mov

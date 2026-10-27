@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>track-morph — pinch &amp; face video warp</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+  #stage { position: fixed; inset: 0; }
+  #ui {
+    position: fixed; top: 12px; left: 12px; z-index: 10;
+    font: 13px/1.5 system-ui, sans-serif; color: #eee;
+    background: rgba(10,10,14,.78); backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,.12); border-radius: 10px;
+    padding: 12px 14px; width: 250px; user-select: none;
+    max-height: calc(100vh - 48px); overflow-y: auto;
+  }
+  #ui h1 { font-size: 13px; margin: 0 0 6px; letter-spacing: .06em; text-transform: uppercase; color: #9fe6c8; }
+  #ui h1 .ver { color: #567; font-size: 10px; text-transform: none; letter-spacing: 0; float: right; }
+  #ui h2 { font-size: 11px; margin: 10px 0 4px; letter-spacing: .08em; text-transform: uppercase; color: #789;
+    border-top: 1px solid rgba(255,255,255,.08); padding-top: 8px; }
+  #ui .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 5px 0; }
+  #ui label { color: #bbb; }
+  #ui select, #ui button {
+    background: #1c1c24; color: #eee; border: 1px solid #333; border-radius: 6px;
+    padding: 3px 8px; font: inherit; cursor: pointer;
+  }
+  #ui button:hover { border-color: #9fe6c8; }
+  #ui button.wide { flex: 1; }
+  #ui input[type=range] { width: 104px; accent-color: #9fe6c8; }
+  #ui input[type=checkbox] { accent-color: #9fe6c8; }
+  #ui .val { color: #789; min-width: 30px; text-align: right; }
+  #playlist { margin-top: 4px; max-height: 130px; overflow-y: auto; }
+  #playlist .item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 3px 4px 3px 8px; border-radius: 5px; cursor: pointer; color: #bbb;
+  }
+  #playlist .item .name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #playlist .item .rm {
+    flex: none; background: none; border: none; color: #667; cursor: pointer;
+    font: 15px/1 system-ui; padding: 1px 5px; border-radius: 4px;
+  }
+  #playlist .item .rm:hover { color: #f66; background: rgba(255,80,80,.12); }
+  #playlist .item:hover { background: rgba(255,255,255,.07); }
+  #playlist .item.current { color: #9fe6c8; background: rgba(159,230,200,.12); }
+  #playlist .item { cursor: grab; }
+  #playlist .item.dragover { outline: 1px dashed #9fe6c8; }
+  #ui select { max-width: 140px; }
+  #presetRow { gap: 4px; }
+  #presetRow button.preset { flex: 1; padding: 3px 0; color: #667; }
+  #presetRow button.preset.saved { color: #9fe6c8; border-color: #3a5a4c; }
+  #status { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.1); color: #8fa; min-height: 34px; white-space: pre-line; }
+  #hint { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 10;
+    color: rgba(255,255,255,.5); font: 12px system-ui, sans-serif; text-align: center; pointer-events: none; }
+  #camPreview {
+    position: fixed; right: 12px; bottom: 12px; z-index: 9; width: 240px;
+    border: 1px solid rgba(255,255,255,.25); border-radius: 8px;
+    background: #111;
+  }
+  #fileInput, #driveInput { display: none; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<canvas id="camPreview"></canvas>
+
+<div id="ui">
+  <h1>track-morph <span class="ver">build 11</span></h1>
+
+  <h2>Tracking</h2>
+  <div class="row"><label>Mode</label>
+    <select id="modeSel">
+      <option value="hands" selected>Hands (pinch)</option>
+      <option value="face">Face</option>
+      <option value="both">Hands + face</option>
+      <option value="body">Body</option>
+      <option value="all">Everything</option>
+    </select>
+  </div>
+  <div class="row"><label>Input</label>
+    <select id="trackInput">
+      <option value="webcam" selected>Webcam</option>
+      <option value="drive">Driving video</option>
+    </select>
+  </div>
+  <div class="row"><button id="loadDriveBtn" class="wide">Load driving video…</button></div>
+  <div class="row"><label>Brush size</label><input id="brushSize" type="range" min="0.06" max="0.35" step="0.01" value="0.16"></div>
+  <div class="row"><label>Pinch</label>
+    <span><input id="pinchDist" type="range" min="0.5" max="1.8" step="0.05" value="1"><span class="val" id="pinchDistVal">×1.00</span></span>
+  </div>
+  <div class="row"><label>Face gain</label><input id="faceAmp" type="range" min="0.5" max="8" step="0.1" value="3"></div>
+  <div class="row"><label>Face warp</label>
+    <select id="faceEffectSel">
+      <option value="pull">Pull</option>
+      <option value="inflate" selected>Inflate</option>
+      <option value="twist">Twist</option>
+      <option value="ripple">Ripple</option>
+    </select>
+  </div>
+
+  <h2>Effect</h2>
+  <div class="row"><label>Warp type</label>
+    <select id="effectSel">
+      <option value="pull" selected>Pull</option>
+      <option value="inflate">Inflate</option>
+      <option value="twist">Twist</option>
+      <option value="ripple">Ripple</option>
+    </select>
+  </div>
+  <div class="row"><label>Material</label>
+    <select id="materialSel">
+      <option value="clay" selected>Clay (holds)</option>
+      <option value="jelly">Jelly (bounces)</option>
+      <option value="liquid">Liquid (ripples)</option>
+    </select>
+  </div>
+  <div class="row"><label>Smoothing</label><input id="smoothing" type="range" min="0" max="1" step="0.01" value="0.35"></div>
+  <div class="row"><label>Shader</label>
+    <select id="shaderSel"></select>
+  </div>
+  <div class="row"><label>Amount</label><input id="amtSlider" type="range" min="0" max="1" step="0.01" value="0.5"></div>
+
+  <h2>Reset</h2>
+  <div class="row"><label><input id="autoReset" type="checkbox"> Auto reset</label>
+    <span><input id="resetDelay" type="range" min="1" max="120" step="1" value="10"><span class="val" id="resetDelayVal">10s</span></span>
+  </div>
+  <div class="row"><button id="resetBtn" class="wide">Reset warp now</button></div>
+
+  <h2>View</h2>
+  <div class="row"><label><input id="showPreview" type="checkbox" checked> Camera preview</label>
+    <label><input id="showCursors" type="checkbox" checked> Points</label></div>
+  <div class="row"><label>Render scale</label><input id="renderScale" type="range" min="0.5" max="1" step="0.05" value="1"></div>
+  <div class="row"><button id="projectorBtn" class="wide">Open projector window</button></div>
+
+  <h2>Extras</h2>
+  <div class="row"><label><input id="mouthBlow" type="checkbox" checked> Mouth blow</label>
+    <label><input id="palmHeal" type="checkbox"> Palm heal</label></div>
+  <div class="row"><label><input id="micReact" type="checkbox"> Mic reactive</label>
+    <input id="micGain" type="range" min="0" max="1" step="0.01" value="0.5"></div>
+  <div class="row"><label><input id="soundOut" type="checkbox"> Canvas sound</label>
+    <label><input id="attract" type="checkbox"> Attract mode</label></div>
+  <div class="row"><button id="recordBtn" class="wide">Record 10s clip (S)</button></div>
+
+  <h2>Presets</h2>
+  <div class="row" id="presetRow"></div>
+  <div class="row"><label><input id="presetCycle" type="checkbox"> Auto-cycle</label>
+    <span class="val" style="min-width:0">shift+click saves</span></div>
+
+  <h2>Media</h2>
+  <div class="row">
+    <button id="webcamBtn" class="wide">Webcam</button>
+    <button id="loadVideoBtn" class="wide">Load files…</button>
+  </div>
+  <div class="row"><label>Playlist</label>
+    <select id="playlistMode">
+      <option value="single">Play single</option>
+      <option value="all" selected>Play all</option>
+      <option value="pingpong">Ping-pong</option>
+      <option value="random">Random</option>
+    </select>
+  </div>
+  <div class="row"><label><input id="plLoop" type="checkbox" checked> Loop</label>
+    <span class="val" style="min-width:0">drag items to reorder</span></div>
+  <div id="playlist"></div>
+
+  <div id="status">starting…</div>
+</div>
+<div id="hint">pinch (thumb + index) to grab &amp; drag — or click-drag with the mouse · face points morph like pinches · R reset · H hide UI · F fullscreen · drop videos/images anywhere</div>
+<input id="fileInput" type="file" accept="video/*,image/*,.mov,.mp4,.m4v,.webm,.mkv,.avi" multiple>
+<input id="driveInput" type="file" accept="video/*,.mov,.mp4,.m4v,.webm,.mkv,.avi">
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs"
+  }
+}
+</script>
+<script type="module" src="main.js?v=11"></script>
+</body>
+</html>
