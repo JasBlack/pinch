@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { FilesetResolver, HandLandmarker, FaceLandmarker, PoseLandmarker } from '@mediapipe/tasks-vision';
-import { EFFECTS, VERTEX, buildFragment } from './shaders.js?v=13';
+import { EFFECTS, VERTEX, buildFragment } from './shaders.js?v=14';
 
 // show startup failures in the status screen instead of leaving a silent, dead page
 const showFatal = msg => { const el = document.getElementById('status'); if (el) el.textContent = msg; };
@@ -35,6 +35,7 @@ const state = {
   handsReady: false,
   faceReady: false,
   poseReady: false,
+  facing: 'user',           // 'user' (front, mirrored) | 'environment' (rear)
 };
 
 const SEG_X = 128, SEG_Y = 72;
@@ -52,7 +53,9 @@ const EYE_L = 33, EYE_R = 263; // used to scale brushes to the face's on-screen 
 // AA off (fullscreen quad, nothing to antialias) and DPR capped: fragment shaders
 // are fill-rate bound, and 2x DPR quadruples the pixels for no visible gain here
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-const BASE_DPR = Math.min(devicePixelRatio, 1.5);
+// phones: touch-first and fill-rate poor, so they render at 1x and default to a lighter render scale
+const IS_PHONE = matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 820;
+const BASE_DPR = Math.min(devicePixelRatio, IS_PHONE ? 1 : 1.5);
 renderer.setPixelRatio(BASE_DPR);
 document.getElementById('stage').appendChild(renderer.domElement);
 
@@ -211,7 +214,7 @@ driveVideo.addEventListener('error', () =>
   setStatus('cannot play driving video — codec unsupported (try H.264 mp4)'));
 
 // The webcam behaves like a mirror; a driving video is watched as-is.
-function trackingIsMirrored() { return activeTrackVideo() === camVideo; }
+function trackingIsMirrored() { return activeTrackVideo() === camVideo && state.facing === 'user'; }
 function activeTrackVideo() {
   return (state.trackingSource === 'drive' && state.driveReady) ? driveVideo : camVideo;
 }
@@ -244,7 +247,7 @@ function useWebcamSource() {
   stopPlaylistPlayback();
   if (!state.camReady) { useFallbackPattern(); renderPlaylistUI(); setStatus(); return; }
   texAspect = camVideo.videoWidth / camVideo.videoHeight;
-  setTexture(new THREE.VideoTexture(camVideo), { mirror: true });
+  setTexture(new THREE.VideoTexture(camVideo), { mirror: state.facing === 'user' });
   resize();
   renderPlaylistUI();
   setStatus();
@@ -277,7 +280,7 @@ function drawFallback(t) {
   c.font = '500 28px "IBM Plex Mono", ui-monospace, monospace'; c.textAlign = 'center';
   c.letterSpacing = '2px';
   c.fillStyle = '#e4e4e1';
-  c.fillText('no camera · drag with the mouse', W / 2, H / 2 + 10);
+  c.fillText(IS_PHONE ? 'no camera · drag with a finger' : 'no camera · drag with the mouse', W / 2, H / 2 + 10);
   c.letterSpacing = '0px';
   if (activeTexture) activeTexture.needsUpdate = true;
 }
@@ -290,6 +293,7 @@ const CAM_HELP = {
   AbortError: 'camera busy — close other apps or tabs using it, then press webcam',
   NotFoundError: 'no camera found — plug one in, then press webcam',
   OverconstrainedError: 'camera rejected the requested size — press webcam to retry',
+  // (facing switches go through the same path)
 };
 let camStarting = false;
 let camError = '';   // shown in the status screen until the camera starts
@@ -300,15 +304,16 @@ async function startWebcam() {
   setStatus('asking for the camera…');
   try {
     if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error('no getUserMedia'), { name: 'SecurityError' });
+    camVideo.srcObject?.getTracks().forEach(t => t.stop());
     let stream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false,
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: state.facing }, audio: false,
       });
     } catch (err) {
       // some cameras / browsers refuse the size hints: retry with whatever the camera offers
       if (err.name !== 'OverconstrainedError' && err.name !== 'NotReadableError') throw err;
-      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: state.facing }, audio: false });
     }
     camVideo.srcObject = stream;
     await camVideo.play();
@@ -320,7 +325,7 @@ async function startWebcam() {
   } catch (err) {
     console.warn('webcam unavailable:', err);
     if (!playlistActive) useFallbackPattern();
-    camError = `${CAM_HELP[err.name] || `no webcam (${err.name || err})`} · mouse drag still works`;
+    camError = `${CAM_HELP[err.name] || `no webcam (${err.name || err})`} · ${IS_PHONE ? 'finger' : 'mouse'} drag still works`;
     setStatus();
   } finally {
     camStarting = false;
@@ -577,13 +582,22 @@ async function initTrackers() {
   }
 }
 
+// GPU first; some phones / browsers can't run the GPU delegate, so retry on the CPU
+async function createTask(Task, options) {
+  try { return await Task.createFromOptions(visionFileset, options); }
+  catch (err) {
+    console.warn('GPU delegate failed, using CPU:', err);
+    return Task.createFromOptions(visionFileset, { ...options, baseOptions: { ...options.baseOptions, delegate: 'CPU' } });
+  }
+}
+
 async function ensureTrackersForMode() {
   if (!visionFileset) return;
   const wantHands = wantHandsFor(state.mode);
   const wantFace = wantFaceFor(state.mode);
   const wantPose = wantPoseFor(state.mode);
   if (wantPose && !poseLandmarker) {
-    poseLandmarker = await PoseLandmarker.createFromOptions(visionFileset, {
+    poseLandmarker = await createTask(PoseLandmarker, {
       baseOptions: {
         modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
         delegate: 'GPU',
@@ -595,7 +609,7 @@ async function ensureTrackersForMode() {
     setStatus();
   }
   if (wantHands && !handLandmarker) {
-    handLandmarker = await HandLandmarker.createFromOptions(visionFileset, {
+    handLandmarker = await createTask(HandLandmarker, {
       baseOptions: {
         modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
         delegate: 'GPU',
@@ -606,7 +620,7 @@ async function ensureTrackersForMode() {
     state.handsReady = true;
   }
   if (wantFace && !faceLandmarker) {
-    faceLandmarker = await FaceLandmarker.createFromOptions(visionFileset, {
+    faceLandmarker = await createTask(FaceLandmarker, {
       baseOptions: {
         modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
         delegate: 'GPU',
@@ -1111,35 +1125,81 @@ function openProjector() {
 }
 
 // ---------- mouse / touch fallback ----------
-let mouseDown = false;
-renderer.domElement.addEventListener('pointerdown', e => { mouseDown = true; feedMouse(e); });
-addEventListener('pointerup', () => { mouseDown = false; });
-renderer.domElement.addEventListener('pointermove', feedMouse);
-function feedMouse(e) {
+// every finger (or the mouse) is its own grab, so two fingers can pull two places at once
+const downPointers = new Set();
+const pointerKey = e => e.pointerType === 'mouse' ? 'mouse' : 'touch' + e.pointerId;
+const cv = renderer.domElement;
+cv.style.touchAction = 'none'; // no scrolling, pinch-zoom or pull-to-refresh while sculpting
+cv.addEventListener('pointerdown', e => {
+  downPointers.add(e.pointerId);
+  cv.setPointerCapture?.(e.pointerId);
+  feedPointer(e);
+});
+cv.addEventListener('pointermove', e => { if (downPointers.has(e.pointerId) || e.pointerType === 'mouse') feedPointer(e); });
+const releasePointer = e => {
+  if (!downPointers.delete(e.pointerId)) return;
+  feedPointer(e);
+  if (e.pointerType !== 'mouse') getCursor(pointerKey(e)).visible = false;
+};
+cv.addEventListener('pointerup', releasePointer);
+cv.addEventListener('pointercancel', releasePointer);
+function feedPointer(e) {
   const x = e.clientX - innerWidth / 2;
   const y = innerHeight / 2 - e.clientY;
+  const down = downPointers.has(e.pointerId);
+  const id = pointerKey(e);
   lastPresence = performance.now();
-  updatePointer('mouse', x, y, mouseDown, performance.now());
-  getCursor('mouse').visible = mouseDown && state.showCursors;
+  updatePointer(id, x, y, down, performance.now());
+  getCursor(id).visible = down && state.showCursors;
 }
 
 // ---------- souvenir clip recording ----------
 let recording = false;
+let pendingClip = null; // phones: a finished clip waiting for a tap to share
+function shareClip() {
+  const file = pendingClip;
+  pendingClip = null;
+  document.querySelectorAll('.recLabel').forEach(el => { el.textContent = el.dataset.label; });
+  navigator.share({ files: [file] })
+    .then(() => setStatus('clip shared'))
+    .catch(err => setStatus(err.name === 'AbortError' ? 'clip discarded' : `share failed: ${err.name}`));
+}
 function recordClip(seconds = 10) {
+  if (pendingClip) { shareClip(); return; }
   if (recording) return;
   recording = true;
   $('recordBtn').classList.add('on'); $('ledRec').classList.add('on');
   const stream = renderer.domElement.captureStream(30);
-  const rec = new MediaRecorder(stream, { mimeType: 'video/webm' });
+  const mimeType = ['video/webm;codecs=vp9', 'video/webm', 'video/mp4;codecs=avc1', 'video/mp4']
+    .find(t => window.MediaRecorder?.isTypeSupported?.(t));
+  if (!mimeType) {
+    recording = false;
+    $('recordBtn').classList.remove('on'); $('ledRec').classList.remove('on');
+    setStatus("this browser can't record the canvas");
+    return;
+  }
+  const ext = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
+  const rec = new MediaRecorder(stream, { mimeType });
   const chunks = [];
   rec.ondataavailable = e => chunks.push(e.data);
   rec.onstop = () => {
     recording = false;
     $('recordBtn').classList.remove('on'); $('ledRec').classList.remove('on');
-    const url = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' }));
+    const blob = new Blob(chunks, { type: mimeType.split(';')[0] });
+    const name = `pinch-${new Date().toISOString().replace(/[:.]/g, '-')}.${ext}`;
+    // phones: hand the clip to the share sheet (save to Photos, send…); elsewhere download it
+    const file = new File([blob], name, { type: blob.type });
+    // the share sheet needs a fresh tap, so the record keys turn into "save clip" until then
+    if (IS_PHONE && navigator.canShare?.({ files: [file] })) {
+      pendingClip = file;
+      document.querySelectorAll('.recLabel').forEach(el => { el.textContent = 'save clip'; });
+      setStatus('clip ready · tap save clip');
+      return;
+    }
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `pinch-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
+    a.download = name;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
     setStatus('clip saved to downloads');
@@ -1302,6 +1362,27 @@ $('resetDelay').addEventListener('input', e => {
   $('resetDelayVal').textContent = `${state.resetDelaySec}s`;
 });
 $('showPreview').addEventListener('change', e => { state.showPreview = e.target.checked; });
+// ---------- phone controls ----------
+async function flipCamera() {
+  state.facing = state.facing === 'user' ? 'environment' : 'user';
+  state.camReady = false;
+  await startWebcam();
+  resetFaceTracking();
+}
+$('flipBtn').addEventListener('click', flipCamera);
+$('qFlip').addEventListener('click', flipCamera);
+$('qReset').addEventListener('click', () => resetWarp());
+$('qRec').addEventListener('click', () => recordClip(10));
+$('qMore').addEventListener('click', () => {
+  const open = $('ui').classList.toggle('open');
+  $('qMore').classList.toggle('on', open);
+});
+if (IS_PHONE) {
+  document.body.classList.add('phone');
+  $('renderScale').value = 0.75;
+  queueMicrotask(() => $('renderScale').dispatchEvent(new Event('input')));
+}
+
 $('renderScale').addEventListener('input', e => {
   renderer.setPixelRatio(BASE_DPR * +e.target.value);
   renderer.setSize(innerWidth, innerHeight);

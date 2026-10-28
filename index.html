@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
 <title>pinch — sculpt live video with your hands, face and body</title>
 <meta name="description" content="Pinch, pull and morph live video in real time with hand, face and body tracking. Runs in your browser; the camera feed never leaves your machine." />
 <meta name="theme-color" content="#121314" />
@@ -169,6 +169,45 @@
   #hint b{color:var(--text);font-weight:600}
   #fileInput,#driveInput{display:none}
   .hidden{display:none !important}
+  #sections{display:flex;flex-direction:column;gap:6px}
+  .quick,.phone-only{display:none}
+  .key.ink.on .dot, .key.ink .dot{flex:none}
+
+  /* ---------- phones: a bottom bar, the full panel slides up on "more" ---------- */
+  body.phone{overscroll-behavior:none}
+  body.phone #ui{
+    top:auto;left:8px;right:8px;width:auto;bottom:calc(8px + env(safe-area-inset-bottom));
+    max-height:calc(100dvh - 140px);overflow:hidden;gap:6px;
+  }
+  body.phone #sections{display:none;order:1;flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;border-radius:12px}
+  body.phone #ui.open #sections{display:flex}
+  body.phone header.panel{order:2}
+  body.phone .dock{order:3;position:static;box-shadow:none;padding:8px 10px}
+  body.phone .dock .bigrow{display:none}
+  body.phone #status{min-height:0;font-size:10px;padding:6px 9px;max-height:4.9em;overflow:hidden}
+  body.phone .quick{order:4;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;flex:none}
+  body.phone .quick .key{height:46px;font-size:11px;border-radius:11px}
+  body.phone .phone-only{display:inline-flex}
+  body.phone .desk-only{display:none}
+  body.phone .key, body.phone .tog, body.phone select{min-height:38px;touch-action:manipulation}
+  body.phone .tog{font-size:10.5px}
+  body.phone select{font-size:11px;max-width:190px}
+  body.phone summary{padding:14px}
+  body.phone input[type=range]{height:30px;max-width:none}
+  body.phone input[type=range]::-webkit-slider-thumb{width:22px;height:22px;margin-top:-10px}
+  body.phone input[type=range]::-moz-range-thumb{width:22px;height:22px}
+  body.phone #presetRow button.preset{height:38px}
+  body.phone #camPreview{top:calc(8px + env(safe-area-inset-top));bottom:auto;right:8px;width:112px;border-radius:10px}
+  body.phone #hint{display:none}
+  /* phone on its side: a compact block in the corner so the video keeps the height */
+  @media (orientation:landscape){
+    body.phone #ui{right:auto;width:min(340px,48vw);left:calc(8px + env(safe-area-inset-left));max-height:calc(100dvh - 16px);gap:5px}
+    body.phone header.panel{padding:6px 12px}
+    body.phone .dock{padding:5px 8px}
+    body.phone #status{font-size:9.5px;padding:4px 8px;max-height:3.3em}
+    body.phone .quick .key{height:38px;font-size:10.5px}
+    body.phone #camPreview{width:96px;right:calc(8px + env(safe-area-inset-right))}
+  }
 
   @media (max-width:1100px){ #hint{display:none} }
   @media (max-width:700px){
@@ -191,6 +230,7 @@
     </div>
   </header>
 
+  <div id="sections">
   <details class="panel" open>
     <summary><b>tracking</b></summary>
     <div class="body">
@@ -210,6 +250,7 @@
             <option value="drive">Driving video</option>
           </select>
           <button id="loadDriveBtn" class="key" style="flex:none;height:28px" title="Load a video for the trackers to watch">load…</button>
+          <button id="flipBtn" class="key phone-only" style="flex:none;height:28px" title="Switch front / rear camera">flip</button>
         </span>
       </div>
       <div class="row"><span class="lbl">brush</span><input id="brushSize" type="range" min="0.06" max="0.35" step="0.01" value="0.16"></div>
@@ -292,7 +333,7 @@
         <label class="tog"><input id="showCursors" type="checkbox" checked>points</label>
       </div>
       <div class="row"><span class="lbl">render scale</span><input id="renderScale" type="range" min="0.5" max="1" step="0.05" value="1"></div>
-      <div class="pair"><button id="projectorBtn" class="key">projector window</button></div>
+      <div class="pair desk-only"><button id="projectorBtn" class="key">projector window</button></div>
     </div>
   </details>
 
@@ -321,9 +362,19 @@
     </div>
   </details>
 
+  </div>
+
   <div class="panel dock">
-    <div class="bigrow"><button id="recordBtn" class="key ink" title="Record 10 s of the artwork (S)"><i class="dot"></i>record 10s</button></div>
+    <div class="bigrow"><button id="recordBtn" class="key ink" title="Record 10 s of the artwork (S)"><i class="dot"></i><span class="recLabel" data-label="record 10s">record 10s</span></button></div>
     <div id="status">starting…</div>
+  </div>
+
+  <!-- phones: the essentials, always in reach; "more" slides the full panel up -->
+  <div class="quick">
+    <button id="qFlip" class="key" aria-label="Switch front / rear camera">⇄ flip</button>
+    <button id="qReset" class="key">⟲ reset</button>
+    <button id="qRec" class="key ink"><i class="dot"></i><span class="recLabel" data-label="rec">rec</span></button>
+    <button id="qMore" class="key" aria-label="All controls">more</button>
   </div>
 </div>
 
@@ -350,7 +401,7 @@
   }
 }
 </script>
-<script type="module" src="main.js?v=13"></script>
+<script type="module" src="main.js?v=14"></script>
 <script>
   // if the app's module never starts (libraries blocked or offline), say so instead of "starting…"
   setTimeout(() => {
