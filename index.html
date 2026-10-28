@@ -350,6 +350,15 @@
   }
 }
 </script>
-<script type="module" src="main.js?v=12"></script>
+<script type="module" src="main.js?v=13"></script>
+<script>
+  // if the app's module never starts (libraries blocked or offline), say so instead of "starting…"
+  setTimeout(() => {
+    if (window.__trackMorph) return;
+    document.getElementById('status').textContent =
+      "the app didn't start — its libraries (three.js, MediaPipe) load from cdn.jsdelivr.net: " +
+      'check an ad blocker, firewall or the connection, then reload';
+  }, 15000);
+</script>
 </body>
 </html>

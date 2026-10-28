@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { FilesetResolver, HandLandmarker, FaceLandmarker, PoseLandmarker } from '@mediapipe/tasks-vision';
-import { EFFECTS, VERTEX, buildFragment } from './shaders.js?v=12';
+import { EFFECTS, VERTEX, buildFragment } from './shaders.js?v=13';
+
+// show startup failures in the status screen instead of leaving a silent, dead page
+const showFatal = msg => { const el = document.getElementById('status'); if (el) el.textContent = msg; };
+addEventListener('error', e => showFatal(`error: ${e.message}`));
+addEventListener('unhandledrejection', e => console.warn('unhandled:', e.reason));
 
 // ---------- state ----------
 const state = {
@@ -191,8 +196,17 @@ const driveVideo = document.createElement('video');
 driveVideo.playsInline = true; driveVideo.muted = true; driveVideo.loop = true;
 
 // surface decode failures (e.g. ProRes/HEVC in a .mov that the browser can't play)
-fileVideo.addEventListener('error', () =>
-  setStatus('cannot play this file — codec unsupported (try H.264 mp4)'));
+// .mov is a container: H.264 and (on a Mac, in Chrome / Safari) HEVC play; ProRes plays only in Safari
+function unplayable(name) {
+  const mov = /\.mov$/i.test(name || '');
+  return `can't play ${name || 'this file'} in this browser — ` +
+    (mov ? 'probably ProRes or HEVC: try Safari, or export it as H.264 mp4' : 'codec unsupported: try an H.264 mp4');
+}
+fileVideo.addEventListener('error', () => {
+  if (!fileVideo.getAttribute('src')) return;
+  mediaError = unplayable(playlist[plIndex]?.name);
+  setStatus();
+});
 driveVideo.addEventListener('error', () =>
   setStatus('cannot play driving video — codec unsupported (try H.264 mp4)'));
 
@@ -268,20 +282,48 @@ function drawFallback(t) {
   if (activeTexture) activeTexture.needsUpdate = true;
 }
 
+// what to tell the person when the camera can't start, by getUserMedia error name
+const CAM_HELP = {
+  NotAllowedError: 'camera blocked — allow it in the address bar (and on a Mac: System Settings → Privacy → Camera), then press webcam',
+  SecurityError: 'camera blocked — the page must be opened over https',
+  NotReadableError: 'camera busy — close other apps or tabs using it, then press webcam',
+  AbortError: 'camera busy — close other apps or tabs using it, then press webcam',
+  NotFoundError: 'no camera found — plug one in, then press webcam',
+  OverconstrainedError: 'camera rejected the requested size — press webcam to retry',
+};
+let camStarting = false;
+let camError = '';   // shown in the status screen until the camera starts
+let mediaError = ''; // why the current playlist item can't play
 async function startWebcam() {
+  if (camStarting) return;
+  camStarting = true;
+  setStatus('asking for the camera…');
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false,
-    });
+    if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error('no getUserMedia'), { name: 'SecurityError' });
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false,
+      });
+    } catch (err) {
+      // some cameras / browsers refuse the size hints: retry with whatever the camera offers
+      if (err.name !== 'OverconstrainedError' && err.name !== 'NotReadableError') throw err;
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    }
     camVideo.srcObject = stream;
     await camVideo.play();
+    if (!camVideo.videoWidth) await new Promise(r => camVideo.addEventListener('loadedmetadata', r, { once: true }));
     state.camReady = true;
+    camError = '';
     if (!playlistActive) useWebcamSource();
     setStatus();
   } catch (err) {
     console.warn('webcam unavailable:', err);
     if (!playlistActive) useFallbackPattern();
-    setStatus(`no webcam (${err.name}) — mouse drag still works`);
+    camError = `${CAM_HELP[err.name] || `no webcam (${err.name || err})`} · mouse drag still works`;
+    setStatus();
+  } finally {
+    camStarting = false;
   }
 }
 
@@ -298,13 +340,13 @@ let imageTimer = null;
 const VIDEO_EXT = /\.(mov|mp4|m4v|webm|mkv|avi|ogv)$/i;
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|avif)$/i;
 // the OS doesn't always report a MIME type (e.g. .mov on Linux) — fall back to extension
-function isVideoFile(f) { return f.type.startsWith('video/') || (!f.type && VIDEO_EXT.test(f.name)); }
-function isImageFile(f) { return f.type.startsWith('image/') || (!f.type && IMAGE_EXT.test(f.name)); }
+function isVideoFile(f) { return f.type.startsWith('video/') || VIDEO_EXT.test(f.name); }
+function isImageFile(f) { return f.type.startsWith('image/') || (!isVideoFile(f) && IMAGE_EXT.test(f.name)); }
 
 function addFiles(files) {
   let added = false;
   for (const f of files) {
-    if (!isVideoFile(f) && !isImageFile(f)) continue;
+    if (!isVideoFile(f) && !isImageFile(f)) { setStatus(`skipped ${f.name} — not a video or image`); continue; }
     playlist.push({ name: f.name, url: URL.createObjectURL(f), isImage: isImageFile(f) });
     added = true;
   }
@@ -327,6 +369,7 @@ function playItem(i) {
   stopReverseScrub();
   clearTimeout(imageTimer);
   const item = playlist[plIndex];
+  mediaError = '';
   fallbackCtx = null;
 
   if (item.isImage) {
@@ -351,7 +394,10 @@ function playItem(i) {
         texAspect = fileVideo.videoWidth / fileVideo.videoHeight;
         setTexture(new THREE.VideoTexture(fileVideo), { mirror: false });
         resize();
-      }).catch(err => console.warn('video play failed:', err));
+      }).catch(err => {
+        console.warn('video play failed:', err);
+        if (err.name !== 'AbortError') { mediaError = unplayable(item.name); setStatus(); }
+      });
     };
     if (fileVideo.src !== item.url) {
       fileVideo.src = item.url;
@@ -1185,8 +1231,10 @@ function setStatus(extra) {
   lines.push(`cam ${state.camReady ? 'live' : 'off'} · hands ${state.handsReady ? 'on' : '—'} · face ${state.faceReady ? 'on' : '—'} · body ${state.poseReady ? 'on' : '—'}`);
   if (attractActive) lines.push('attract mode active — ghost performers');
   if (state.trackingSource === 'drive' && state.driveReady) lines.push('tracking: driving video');
+  if (!state.camReady && camError) lines.push(camError);
   if (playlistActive && playlist.length)
     lines.push(`playing ${plIndex + 1}/${playlist.length}: ${playlist[plIndex].name}`);
+  if (playlistActive && mediaError) lines.push(mediaError);
   if (extra) lines.push(extra);
   statusEl.textContent = lines.join('\n');
   ledCam.classList.toggle('on', state.camReady || (state.trackingSource === 'drive' && state.driveReady));
@@ -1264,7 +1312,7 @@ $('showCursors').addEventListener('change', e => {
 });
 $('resetBtn').addEventListener('click', resetWarp);
 $('projectorBtn').addEventListener('click', openProjector);
-$('webcamBtn').addEventListener('click', useWebcamSource);
+$('webcamBtn').addEventListener('click', () => { if (state.camReady) useWebcamSource(); else { stopPlaylistPlayback(); startWebcam(); } });
 $('playlistMode').addEventListener('change', e => {
   plMode = e.target.value;
   stopReverseScrub();
@@ -1530,9 +1578,11 @@ function tick(now) {
   updateTrails(); // must run right after render, while the frame is still in the buffer
 }
 
-setStatus('loading trackers…');
 startWebcam();
-initTrackers();
+Promise.resolve().then(initTrackers).catch(err => {
+  console.warn('trackers failed:', err);
+  setStatus(`trackers failed to load (${err.message || err}) · camera and mouse still work`);
+});
 requestAnimationFrame(tick);
 
 // debug handle for automated smoke tests
