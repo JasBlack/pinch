@@ -163,22 +163,6 @@
   .dock{position:sticky;bottom:0;display:flex;flex-direction:column;gap:9px;box-shadow:0 -10px 16px -6px var(--case)}
   .note{font-size:8.5px;color:var(--muted);letter-spacing:.04em}
 
-  /* ---------- top bar (computers): title + lights, the main keys, view keys — like Paint, Growth and Fault ---------- */
-  #topbar{position:fixed;top:0;left:0;right:0;height:58px;z-index:11;display:none;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);
-    align-items:center;gap:14px;padding:0 16px;background:var(--case);border-bottom:1px solid var(--line)}
-  body.topbar #topbar{display:grid}
-  #topbar .l,#topbar .c,#topbar .r{display:flex;align-items:center;gap:8px;min-width:0}
-  #topbar .l{gap:14px}
-  #topbar .r{justify-content:flex-end}
-  #topbar .status{gap:12px}
-  #topbar .key{flex:none;height:33px;font-size:10px;padding:0 11px}
-  #topbar .c .key{height:38px;min-width:65px}
-  #topbar .key.icon{width:36px;padding:0;font-size:17px}
-  body.topbar #ui{top:70px;max-height:calc(100vh - 84px)}
-  body.topbar #ui>header.panel{display:none}
-  @media (max-width:900px){ #topbar .status,#tbOpen{display:none} }
-  @media (max-width:700px){ body.topbar #ui{max-height:calc(55vh - 62px)} #tbHide{display:none} }
-
   /* ---------- camera preview + hint ---------- */
   #camPreview{position:fixed;right:14px;bottom:14px;z-index:9;width:240px;border-radius:12px;border:1px solid var(--line);background:var(--panel)}
   #hint{
@@ -238,24 +222,11 @@
 </head>
 <body>
 <div id="stage"></div>
-<!-- top bar (computers): main.js moves the title + status lights up here from the panel's first card; phones keep that card -->
-<header id="topbar">
-  <div class="l"></div>
-  <div class="c">
-    <button id="tbOpen" class="key" title="Open videos or pictures">open files…</button>
-    <button id="tbReset" class="key go" title="Reset the warp (R)">⟲ reset</button>
-    <button id="recordBtn" class="key ink" title="Record 10 s of the artwork (S)"><i class="dot"></i><span class="recLabel" data-label="record 10s">record 10s</span></button>
-  </div>
-  <div class="r">
-    <button id="tbHide" class="key" title="Hide the controls (H brings them back)">hide ui</button>
-    <button id="tbFull" class="key icon" title="Full screen (F)" aria-label="Full screen">⛶</button>
-  </div>
-</header>
 <canvas id="camPreview"></canvas>
 
 <div id="ui">
   <header class="panel">
-    <span class="brandbox"><span class="brand">PINCH</span><span class="brand-ver">build 13</span></span>
+    <span class="brandbox"><span class="brand">PINCH</span><span class="brand-ver">build 12</span></span>
     <div class="status" aria-label="Status">
       <span><i class="led" id="ledCam"></i><span class="lbl">cam</span></span>
       <span><i class="led p" id="ledTrack"></i><span class="lbl">track</span></span>
@@ -398,6 +369,7 @@
   </div>
 
   <div class="panel dock">
+    <div class="bigrow"><button id="recordBtn" class="key ink" title="Record 10 s of the artwork (S)"><i class="dot"></i><span class="recLabel" data-label="record 10s">record 10s</span></button></div>
     <div id="status">starting…</div>
   </div>
 
@@ -433,7 +405,7 @@
   }
 }
 </script>
-<script type="module" src="main.js?v=15"></script>
+<script type="module" src="main.js?v=14"></script>
 <script>
   // if the app's module never starts (libraries blocked or offline), say so instead of "starting…"
   setTimeout(() => {

@@ -1377,20 +1377,6 @@ $('qMore').addEventListener('click', () => {
   const open = $('ui').classList.toggle('open');
   $('qMore').classList.toggle('on', open);
 });
-// H / "hide ui": the controls, the top bar and the hint go; the artwork stays
-function toggleUi() {
-  for (const id of ['ui', 'hint', 'topbar']) $(id).classList.toggle('hidden');
-}
-$('tbOpen').addEventListener('click', () => $('fileInput').click());
-$('tbReset').addEventListener('click', () => resetWarp());
-$('tbHide').addEventListener('click', toggleUi);
-$('tbFull').addEventListener('click', () => document.documentElement.requestFullscreen?.());
-if (!IS_PHONE) {
-  // computers: the title and the status lights live in the top bar
-  const card = document.querySelector('#ui > header.panel');
-  $('topbar').querySelector('.l').append(...card.children);
-  document.body.classList.add('topbar');
-}
 if (IS_PHONE) {
   document.body.classList.add('phone');
   $('renderScale').value = 0.75;
@@ -1455,7 +1441,10 @@ addEventListener('keydown', e => {
   if (e.key === 'r' || e.key === 'R') resetWarp();
   if (e.key === 'f' || e.key === 'F') document.documentElement.requestFullscreen?.();
   if (e.key === 's' || e.key === 'S') recordClip(10);
-  if (e.key === 'h' || e.key === 'H') toggleUi();
+  if (e.key === 'h' || e.key === 'H') {
+    $('ui').classList.toggle('hidden');
+    $('hint').classList.toggle('hidden');
+  }
   const digit = parseInt(e.key, 10);
   if (digit >= 1 && digit <= PRESET_COUNT) {
     e.shiftKey ? savePreset(digit - 1) : loadPreset(digit - 1);
