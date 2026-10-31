@@ -53,6 +53,8 @@
   /* the version: only while the title is hovered */
   .brand-ver{font:500 9px 'IBM Plex Mono',ui-monospace,monospace;letter-spacing:.08em;color:var(--muted);white-space:nowrap;opacity:0;transition:opacity .15s}
   .brand:hover+.brand-ver,.brand-ver:hover{opacity:1}
+  /* the green LED before every JAS.BLACK tool title */
+  .brand{display:inline-flex;align-items:center;gap:10px}.brand::before{content:'';flex:none;width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent)}
   .status{display:flex;gap:10px}
   .status span{display:flex;align-items:center;gap:5px}
   .led{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--ledoff);flex:none;transition:background .2s,box-shadow .2s}
