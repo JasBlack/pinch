@@ -48,7 +48,11 @@
   .panel{border-radius:12px;background:var(--panel);border:1px solid var(--line);padding:12px 14px;flex:none}
 
   header.panel{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px}
-  .brand{font-family:'Archivo',sans-serif;font-weight:800;font-size:13px;letter-spacing:.32em;white-space:nowrap}
+  .brandbox{display:flex;align-items:baseline;gap:9px;min-width:0}
+  .brand{font-family:'Archivo',sans-serif;font-weight:800;font-size:13px;letter-spacing:.32em;white-space:nowrap;cursor:default}
+  /* the version: only while the title is hovered */
+  .brand-ver{font:500 9px 'IBM Plex Mono',ui-monospace,monospace;letter-spacing:.08em;color:var(--muted);white-space:nowrap;opacity:0;transition:opacity .15s}
+  .brand:hover+.brand-ver,.brand-ver:hover{opacity:1}
   .status{display:flex;gap:10px}
   .status span{display:flex;align-items:center;gap:5px}
   .led{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--ledoff);flex:none;transition:background .2s,box-shadow .2s}
@@ -222,7 +226,7 @@
 
 <div id="ui">
   <header class="panel">
-    <span class="brand" title="build 12">PINCH</span>
+    <span class="brandbox"><span class="brand">PINCH</span><span class="brand-ver">build 12</span></span>
     <div class="status" aria-label="Status">
       <span><i class="led" id="ledCam"></i><span class="lbl">cam</span></span>
       <span><i class="led p" id="ledTrack"></i><span class="lbl">track</span></span>
@@ -410,6 +414,22 @@
       "the app didn't start — its libraries (three.js, MediaPipe) load from cdn.jsdelivr.net: " +
       'check an ad blocker, firewall or the connection, then reload';
   }, 15000);
+
+  // right-click any slider: back to its default (its value once the page has loaded)
+  (() => {
+    const defs = new WeakMap();
+    addEventListener('load', () => { for (const el of document.querySelectorAll('input[type=range]')) defs.set(el, el.value); });
+    document.addEventListener('contextmenu', e => {
+      const el = e.target;
+      if (e.defaultPrevented || !(el instanceof HTMLInputElement) || el.type !== 'range' || el.disabled) return;
+      e.preventDefault();
+      const d = defs.get(el) ?? el.defaultValue;
+      if (el.value === d) return;
+      el.value = d;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  })();
 </script>
 </body>
 </html>
