@@ -1291,7 +1291,7 @@ const statusEl = document.getElementById('status');
 const ledCam = document.getElementById('ledCam'), ledTrack = document.getElementById('ledTrack');
 function setStatus(extra) {
   const lines = [];
-  lines.push(`cam ${state.camReady ? 'live' : 'off'} · hands ${state.handsReady ? 'on' : '—'} · face ${state.faceReady ? 'on' : '—'} · body ${state.poseReady ? 'on' : '—'}`);
+  // (camera and tracking are the two lights by the title; the box only shows messages)
   if (attractActive) lines.push('attract mode active — ghost performers');
   if (state.trackingSource === 'drive' && state.driveReady) lines.push('tracking: driving video');
   if (!state.camReady && camError) lines.push(camError);
@@ -1300,6 +1300,7 @@ function setStatus(extra) {
   if (playlistActive && mediaError) lines.push(mediaError);
   if (extra) lines.push(extra);
   statusEl.textContent = lines.join('\n');
+  statusEl.style.display = lines.length ? '' : 'none';
   ledCam.classList.toggle('on', state.camReady || (state.trackingSource === 'drive' && state.driveReady));
   ledTrack.classList.toggle('on', state.handsReady || state.faceReady || state.poseReady);
 }
