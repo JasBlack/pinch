@@ -29,20 +29,25 @@
     --case:#121314; --panel:#18191b; --line:#26272a;
     --key:#222326; --keyon:#1b1c1e; --keyline:#303135; --keyshadow:#070708; --press:rgba(0,0,0,.5);
     --text:#e4e4e1; --muted:#6f7074; --ledoff:#34353a; --knobtop:#2c2d31; --track:#2e2f33; --well:#141517;
-    --accent:#39ff88; --accent2:#b36bff;
+    --accent:#39ff88; --accent2:#8b6cff;
     --glow:0 0 4px color-mix(in srgb, var(--accent) 90%, transparent);
     --glow2:0 0 4px color-mix(in srgb, var(--accent2) 90%, transparent);
+    /* the family dot grid (option B: 16 px, fine and faint), a baked tile, never a live gradient */
+    --dotgrid:url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAATElEQVR42u3OOQrAQAxDUSlp5v6ndROcRhcYM6TJf+DCAi8SAAB/5+lgd9+SVtqy/Uz2XMPjznGnVrJvHjhp9IDtllSSOlXJAADAthcsBBEI93xN9gAAAABJRU5ErkJggg==');
+    --keysh:24px; /* the key-hint strip along the bottom; the stage ends above it */
   }
+  @media (hover:none) and (pointer:coarse){ :root{--keysh:0px} }
+  body.phone,body.bare{--keysh:0px}
   *{box-sizing:border-box}
-  html,body{margin:0;height:100%;overflow:hidden;background:var(--case)}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--dotgrid) 0 0/16px 16px,var(--case)}
   body{color:var(--text);font:11px/1.4 'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace}
-  #stage{position:fixed;inset:0}
+  #stage{position:fixed;inset:0 0 var(--keysh) 0;background:var(--case)}
   button{font:inherit;color:inherit;cursor:pointer}
 
   /* ---------- control panel ---------- */
   #ui{
     position:fixed;top:14px;left:14px;z-index:10;width:292px;
-    max-height:calc(100vh - 28px);overflow-y:auto;overscroll-behavior:contain;
+    max-height:calc(100vh - 28px - var(--keysh));overflow-y:auto;overscroll-behavior:contain;
     display:flex;flex-direction:column;gap:6px;user-select:none;
     scrollbar-width:thin;scrollbar-color:var(--keyline) transparent;
   }
@@ -167,14 +172,21 @@
   .dock{position:sticky;bottom:0;display:flex;flex-direction:column;gap:9px;box-shadow:0 -10px 16px -6px var(--case)}
   .note{font-size:8.5px;color:var(--muted);letter-spacing:.04em}
 
-  /* ---------- camera preview + hint ---------- */
-  #camPreview{position:fixed;right:14px;bottom:14px;z-index:9;width:240px;border-radius:12px;border:1px solid var(--line);background:var(--panel)}
-  #hint{
-    position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:10;pointer-events:none;
-    border-radius:8px;background:#0b0b0cdd;border:1px solid var(--line);padding:6px 12px;
-    font-size:9px;color:var(--muted);white-space:nowrap;
+  /* ---------- camera preview + key hints ---------- */
+  #camPreview{position:fixed;right:14px;bottom:calc(14px + var(--keysh));z-index:9;width:240px;border-radius:12px;border:1px solid var(--line);background:var(--panel)}
+  /* the family key-hint bar (as in Align): one line of small raised keys on the case under the stage */
+  .keys{
+    position:fixed;left:0;right:0;bottom:0;height:var(--keysh);z-index:10;padding:0 14px;
+    display:flex;align-items:center;justify-content:space-between;gap:12px;overflow:hidden;white-space:nowrap;
+    font-size:8.5px;color:var(--muted);letter-spacing:.08em;
   }
-  #hint b{color:var(--text);font-weight:600}
+  kbd{
+    display:inline-block;min-width:14px;padding:0 4px;margin:0 1px;border-radius:3px;
+    border:1px solid var(--keyline);background:var(--key);box-shadow:0 1px 0 var(--keyshadow);
+    font:500 8.5px/14px 'IBM Plex Mono',ui-monospace,monospace;color:var(--text);text-align:center;letter-spacing:0;
+  }
+  body.bare .keys{display:none}
+  @media (hover:none) and (pointer:coarse){ .keys{display:none} }
   #fileInput,#driveInput{display:none}
   .hidden{display:none !important}
   #sections{display:flex;flex-direction:column;gap:6px}
@@ -206,7 +218,7 @@
   body.phone input[type=range]::-moz-range-thumb{width:22px;height:22px}
   body.phone #presetRow button.preset{height:38px}
   body.phone #camPreview{top:calc(8px + env(safe-area-inset-top));bottom:auto;right:8px;width:112px;border-radius:10px}
-  body.phone #hint{display:none}
+  body.phone .keys{display:none}
   /* phone on its side: a compact block in the corner so the video keeps the height */
   @media (orientation:landscape){
     body.phone #ui{right:auto;width:min(340px,48vw);left:calc(8px + env(safe-area-inset-left));max-height:calc(100dvh - 16px);gap:5px}
@@ -217,7 +229,6 @@
     body.phone #camPreview{width:96px;right:calc(8px + env(safe-area-inset-right))}
   }
 
-  @media (max-width:1100px){ #hint{display:none} }
   @media (max-width:700px){
     #ui{top:8px;left:8px;right:8px;width:auto;max-height:55vh}
     #camPreview{width:150px;right:8px;bottom:8px}
@@ -230,7 +241,7 @@
 
 <div id="ui">
   <header class="panel">
-    <span class="brandbox"><span class="brand">PINCH</span><span class="brand-ver">build 12</span></span>
+    <span class="brandbox"><span class="brand">PINCH</span><span class="brand-ver">build 13</span></span>
     <div class="status" aria-label="Status">
       <span><i class="led" id="ledCam"></i><span class="lbl">cam</span></span>
       <span><i class="led p" id="ledTrack"></i><span class="lbl">track</span></span>
@@ -386,7 +397,10 @@
   </div>
 </div>
 
-<div id="hint"><b>pinch</b> to grab &amp; drag · or click-drag · <b>R</b> reset · <b>H</b> hide ui · <b>F</b> full screen · <b>S</b> record · drop videos anywhere</div>
+<footer class="keys" id="hint">
+  <span><kbd>R</kbd> reset &middot; <kbd>S</kbd> record &middot; <kbd>H</kbd> hide &middot; <kbd>F</kbd> full screen &middot; <kbd>1</kbd>&ndash;<kbd>6</kbd> preset &middot; <kbd>shift</kbd>+<kbd>1</kbd>&ndash;<kbd>6</kbd> save</span>
+  <span>right-click a setting resets it</span>
+</footer>
 <input id="fileInput" type="file" accept="video/*,image/*,.mov,.mp4,.m4v,.webm,.mkv,.avi" multiple>
 <input id="driveInput" type="file" accept="video/*,.mov,.mp4,.m4v,.webm,.mkv,.avi">
 
@@ -409,7 +423,7 @@
   }
 }
 </script>
-<script type="module" src="main.js?v=14"></script>
+<script type="module" src="main.js?v=15"></script>
 <script>
   // if the app's module never starts (libraries blocked or offline), say so instead of "starting…"
   setTimeout(() => {
@@ -419,17 +433,21 @@
       'check an ad blocker, firewall or the connection, then reload';
   }, 15000);
 
-  // right-click any slider: back to its default (its value once the page has loaded)
+  // right-click any setting: back to its default (its state once the page has loaded).
+  // Family rule: sliders, selects and the toggle keys (a checkbox inside a label).
+  // Action keys (open, record, reset, presets) keep the browser's normal menu.
   (() => {
     const defs = new WeakMap();
-    addEventListener('load', () => { for (const el of document.querySelectorAll('input[type=range]')) defs.set(el, el.value); });
+    const val = el => el.type === 'checkbox' ? el.checked : el.value;
+    addEventListener('load', () => { for (const el of document.querySelectorAll('#ui input, #ui select')) defs.set(el, val(el)); });
     document.addEventListener('contextmenu', e => {
-      const el = e.target;
-      if (e.defaultPrevented || !(el instanceof HTMLInputElement) || el.type !== 'range' || el.disabled) return;
+      if (e.defaultPrevented || !(e.target instanceof Element)) return;
+      const el = e.target.closest('input, select') || e.target.closest('label.tog')?.querySelector('input');
+      if (!el || el.disabled || !defs.has(el)) return;
       e.preventDefault();
-      const d = defs.get(el) ?? el.defaultValue;
-      if (el.value === d) return;
-      el.value = d;
+      const d = defs.get(el);
+      if (val(el) === d) return;
+      if (el.type === 'checkbox') el.checked = d; else el.value = d;
       el.dispatchEvent(new Event('input', { bubbles: true }));
       el.dispatchEvent(new Event('change', { bubbles: true }));
     });

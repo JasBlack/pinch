@@ -57,7 +57,10 @@ const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'h
 const IS_PHONE = matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 820;
 const BASE_DPR = Math.min(devicePixelRatio, IS_PHONE ? 1 : 1.5);
 renderer.setPixelRatio(BASE_DPR);
-document.getElementById('stage').appendChild(renderer.domElement);
+const stageEl = document.getElementById('stage');
+stageEl.appendChild(renderer.domElement);
+// the stage's size: the window less the key-hint strip along the bottom (desktop only)
+const stageW = () => stageEl.clientWidth || innerWidth, stageH = () => stageEl.clientHeight || innerHeight;
 
 const scene = new THREE.Scene();
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -10, 10);
@@ -148,7 +151,7 @@ function getCursor(id) {
 let texAspect = 16 / 9;
 
 function resize() {
-  const w = innerWidth, h = innerHeight;
+  const w = stageW(), h = stageH();
   renderer.setSize(w, h);
   camera.left = -w / 2; camera.right = w / 2;
   camera.top = h / 2; camera.bottom = -h / 2;
@@ -634,7 +637,7 @@ async function ensureTrackersForMode() {
 }
 
 // ---------- warp engine ----------
-function brushRadius() { return state.brushFrac * Math.min(innerWidth, innerHeight); }
+function brushRadius() { return state.brushFrac * Math.min(stageW(), stageH()); }
 
 // Displace vertices near (px,py). Edge vertices are pinned. Only the grid patch
 // the brush can reach is visited (margin covers already-displaced vertices).
@@ -795,7 +798,7 @@ function commitVertices() {
   meshDirty = false;
   const p = geometry.attributes.position;
   const disp = geometry.attributes.aDisp;
-  const dispScale = 1 / (0.25 * Math.min(innerWidth, innerHeight));
+  const dispScale = 1 / (0.25 * Math.min(stageW(), stageH()));
   let c0 = 0, c1 = SEG_X, r0 = 0, r1 = SEG_Y;
   if (!commitAll && warpBox) ({ c0, c1, r0, r1 } = warpBox);
   commitAll = false;
@@ -858,8 +861,8 @@ function maybeAutoReset(now) {
 function lmToWorld(lx, ly) {
   const sx = trackingIsMirrored() ? 1 - lx : lx;
   return {
-    x: (sx - 0.5) * innerWidth,
-    y: (0.5 - ly) * innerHeight,
+    x: (sx - 0.5) * stageW(),
+    y: (0.5 - ly) * stageH(),
   };
 }
 
@@ -1073,7 +1076,7 @@ function drawPreview() {
         c.beginPath(); c.arc(px(p.x) * w, p.y * h, 1.5, 0, 7); c.fill();
       }
       const t = lm[4], ix = lm[8];
-      c.strokeStyle = c.fillStyle = pinched ? '#39ff88' : '#b36bff';
+      c.strokeStyle = c.fillStyle = pinched ? '#39ff88' : '#8b6cff';
       c.lineWidth = 2;
       c.beginPath();
       c.moveTo(px(t.x) * w, t.y * h);
@@ -1144,8 +1147,8 @@ const releasePointer = e => {
 cv.addEventListener('pointerup', releasePointer);
 cv.addEventListener('pointercancel', releasePointer);
 function feedPointer(e) {
-  const x = e.clientX - innerWidth / 2;
-  const y = innerHeight / 2 - e.clientY;
+  const x = e.clientX - stageW() / 2;
+  const y = stageH() / 2 - e.clientY;
   const down = downPointers.has(e.pointerId);
   const id = pointerKey(e);
   lastPresence = performance.now();
@@ -1385,7 +1388,7 @@ if (IS_PHONE) {
 
 $('renderScale').addEventListener('input', e => {
   renderer.setPixelRatio(BASE_DPR * +e.target.value);
-  renderer.setSize(innerWidth, innerHeight);
+  renderer.setSize(stageW(), stageH());
 });
 $('showCursors').addEventListener('change', e => {
   state.showCursors = e.target.checked;
@@ -1443,7 +1446,8 @@ addEventListener('keydown', e => {
   if (e.key === 's' || e.key === 'S') recordClip(10);
   if (e.key === 'h' || e.key === 'H') {
     $('ui').classList.toggle('hidden');
-    $('hint').classList.toggle('hidden');
+    document.body.classList.toggle('bare'); // the key bar goes too, and the stage takes the whole window
+    resize();
   }
   const digit = parseInt(e.key, 10);
   if (digit >= 1 && digit <= PRESET_COUNT) {
@@ -1463,8 +1467,8 @@ function runAttract(now) {
   attractActive = true;
   const t = now * 0.001;
   for (let g = 0; g < 2; g++) {
-    const px = Math.sin(t * (0.21 + g * 0.07) + g * 2.3) * innerWidth * 0.30;
-    const py = Math.sin(t * (0.16 + g * 0.05) + g * 4.1) * innerHeight * 0.28;
+    const px = Math.sin(t * (0.21 + g * 0.07) + g * 2.3) * stageW() * 0.30;
+    const py = Math.sin(t * (0.16 + g * 0.05) + g * 4.1) * stageH() * 0.28;
     const prev = ghostPrev[g];
     if (prev) {
       applyBrush(px, py, (px - prev.x) * 0.6, (py - prev.y) * 0.6,
@@ -1474,7 +1478,7 @@ function runAttract(now) {
     if (state.showCursors) {
       const c = getCursor('ghost' + g);
       c.visible = true; c.position.set(px, py, 1);
-      c.material.color.set(0xb36bff);
+      c.material.color.set(0x8b6cff);
     }
   }
 }

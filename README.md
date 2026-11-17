@@ -105,6 +105,8 @@ camera access requires localhost or https.)
 | Reset warp | `R` or Reset button |
 | Hide/show the UI | `H` |
 | Fullscreen | `F` |
+| Load / save a preset | `1`–`6` / `shift`+`1`–`6` |
+| Return a setting to its default | right-click it (sliders, dropdowns, toggles) |
 
 ## Performance
 
